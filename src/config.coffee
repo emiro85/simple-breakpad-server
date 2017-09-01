@@ -26,6 +26,7 @@ nconf.env()
 nconf.defaults
   port: 1127
   baseUrl: '/'
+  serverName: 'Breakpad Server'
   database:
     host: 'localhost'
     dialect: 'sqlite'

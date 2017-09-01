@@ -97,6 +97,7 @@ Here is an example configuration:
 ```yaml
 port: 1127
 baseUrl: '/'
+serverName: 'Breakpad Server'
 database:
   database: 'simple-breakpad-server'
   username: 'myuser'

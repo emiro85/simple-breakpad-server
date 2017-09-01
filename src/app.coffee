@@ -106,6 +106,7 @@ run = ->
 
   baseUrl = config.get('baseUrl')
   port = config.get('port')
+  serverName = config.get('serverName')
 
   app.use baseUrl, breakpad
 
@@ -195,6 +196,7 @@ run = ->
           []
 
       res.render 'crashreport-index',
+        serverName: serverName
         title: 'Crash Reports'
         crashreportsActive: yes
         records: viewReports
@@ -228,6 +230,7 @@ run = ->
           []
 
       res.render 'symfile-index',
+        serverName: serverName
         title: 'Symfiles'
         symfilesActive: yes
         records: viewSymfiles
@@ -248,6 +251,7 @@ run = ->
         res.end()
       else
         res.render 'symfile-view', {
+          serverName: serverName
           title: 'Symfile'
           symfile: symfileToViewJson(symfile)
         }
@@ -261,6 +265,7 @@ run = ->
         fields = crashreportToViewJson(report).props
 
         res.render 'crashreport-view', {
+          serverName: serverName
           title: 'Crash Report'
           stackwalk: stackwalk
           product: fields.product
