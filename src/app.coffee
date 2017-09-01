@@ -85,8 +85,7 @@ isLoggedIn = (req, res, next) ->
 # initialization: init db and write all symfiles to disk
 db.sync()
   .then ->
-    Symfile.findAll().then (symfiles) ->
-      Promise.all(symfiles.map((s) -> Symfile.saveToDisk(s))).then(run)
+    Symfile.saveAllToDisk().then(run)
   .catch (err) ->
     console.error err.stack
     process.exit 1
@@ -214,24 +213,8 @@ run = ->
     offset = req.offset
     page = req.query.page
 
-    attributes = []
-
-    # only fetch non-blob attributes to speed up the query
-    for name, value of Crashreport.attributes
-      unless value.type instanceof Sequelize.BLOB
-        attributes.push name
-
-    findAllQuery =
-      order: 'created_at DESC'
-      limit: limit
-      offset: offset
-      attributes: attributes
-
-    Crashreport.findAndCountAll(findAllQuery).then (q) ->
-      records = q.rows
-      count = q.count
+    Crashreport.getAllReports limit, offset, (records, count) ->
       pageCount = Math.ceil(count / limit)
-
       viewReports = records.map(crashreportToViewJson)
 
       fields =
@@ -256,16 +239,8 @@ run = ->
     offset = req.offset
     page = req.query.page
 
-    findAllQuery =
-      order: 'created_at DESC'
-      limit: limit
-      offset: offset
-
-    Symfile.findAndCountAll(findAllQuery).then (q) ->
-      records = q.rows
-      count = q.count
+    Symfile.getAllSymfiles limit, offset, (records, count) ->
       pageCount = Math.ceil(count / limit)
-
       viewSymfiles = records.map(symfileToViewJson)
 
       fields =

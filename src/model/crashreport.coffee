@@ -33,6 +33,25 @@ for field in customFields.files
 
 Crashreport = sequelize.define('crashreports', schema, options)
 
+Crashreport.getAllReports = (limit, offset, callback) ->
+  attributes = []
+
+  # only fetch non-blob attributes to speed up the query
+  for name, value of Crashreport.attributes
+    unless value.type instanceof Sequelize.BLOB
+      attributes.push name
+
+  findAllQuery =
+    order: 'created_at DESC'
+    limit: limit
+    offset: offset
+    attributes: attributes
+
+  Crashreport.findAndCountAll(findAllQuery).then (q) ->
+    records = q.rows
+    count = q.count
+    callback(records, count)
+
 Crashreport.getStackTrace = (record, callback) ->
   return callback(null, cache.get(record.id)) if cache.has record.id
 

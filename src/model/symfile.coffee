@@ -35,6 +35,17 @@ options =
 
 Symfile = sequelize.define('symfiles', schema, options)
 
+Symfile.getAllSymfiles = (limit, offset, callback) ->
+  findAllQuery =
+    order: 'created_at DESC'
+    limit: limit
+    offset: offset
+
+  Symfile.findAndCountAll(findAllQuery).then (q) ->
+    records = q.rows
+    count = q.count
+    callback(records, count)
+
 Symfile.saveToDisk = (symfile) ->
   symfileDir = path.join(symbolsPath, symfile.name, symfile.code)
   fs.mkdirs(symfileDir).then ->
@@ -48,6 +59,10 @@ Symfile.saveToDisk = (symfile) ->
     symbol_name += '.sym'
     filePath = path.join(symfileDir, symbol_name)
     fs.writeFile(filePath, symfile.contents)
+
+Symfile.saveAllToDisk = () ->
+  Symfile.findAll().then (symfiles) ->
+    Promise.all(symfiles.map((s) -> Symfile.saveToDisk(s)))
 
 Symfile.createFromRequest = (req, res, callback) ->
   props = {}
