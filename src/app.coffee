@@ -6,6 +6,7 @@ path = require 'path'
 express = require 'express'
 expressSession = require 'express-session'
 exphbs = require 'express-handlebars'
+handlebars = require('handlebars')
 hbsPaginate = require 'handlebars-paginate'
 paginate = require 'express-paginate'
 Crashreport = require './model/crashreport'
@@ -94,6 +95,27 @@ run = ->
   app = express()
   breakpad = express()
 
+  eachInMap = (context, options) ->
+    if !options
+      throw new Exception('Must pass iterator to #each')
+    fn = options.fn
+    inverse = options.inverse
+    ret = ''
+    data = undefined
+    if options.data
+      data = handlebars.createFrame(options.data)
+
+    if context and typeof context == 'object'
+      i = 0
+      context.forEach (value, key) ->
+        if data
+          data.key = key
+        ret = ret + fn(value, data: data)
+        i++
+    if i == 0
+      ret = inverse(this)
+    ret
+
   hbs = exphbs.create
     defaultLayout: 'main'
     partialsDir: path.resolve(__dirname, '..', 'views')
@@ -103,6 +125,8 @@ run = ->
       reportUrl: (id) -> "/crashreports/#{id}"
       symfileUrl: (id) -> "/symfiles/#{id}"
       titleCase: titleCase
+      eachInMap: eachInMap
+
 
   breakpad.set 'json spaces', 2
   breakpad.set 'views', path.resolve(__dirname, '..', 'views')
