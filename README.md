@@ -105,6 +105,8 @@ database:
   dialect: 'sqlite'
   storage: '/home/myuser/.simple-breakpad-server/database.sqlite'
   logging: false
+auth:
+  enabled: false
 customFields:
   files:
     - name: 'customfile1'
@@ -117,6 +119,17 @@ dataDir: '/home/myuser/.simple-breakpad-server'
 ### Database configuration
 
 Database options are passed directly to [Sequelize](http://docs.sequelizejs.com/en/v3/api/sequelize/). See that page for details on how to configure the database. Currently, sqlite is best supported by Simple Breakpad Server.
+
+### Authentication
+
+By default, authentication is disabled. It can be enabled by setting `enabled` to `true` and defining a user password pair.
+
+```
+auth:
+  enabled: true
+  username: 'admin'
+  password: 'test'
+```
 
 ### Custom Fields
 

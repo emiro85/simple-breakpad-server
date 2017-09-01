@@ -32,6 +32,8 @@ nconf.defaults
     dialect: 'sqlite'
     storage: path.join(SBS_HOME, 'database.sqlite')
     logging: no
+  auth:
+    enabled: false
   customFields:
     files: []
     params: []

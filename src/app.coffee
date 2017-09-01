@@ -4,6 +4,7 @@ bodyParser = require 'body-parser'
 methodOverride = require('method-override')
 path = require 'path'
 express = require 'express'
+expressSession = require 'express-session'
 exphbs = require 'express-handlebars'
 hbsPaginate = require 'handlebars-paginate'
 paginate = require 'express-paginate'
@@ -15,6 +16,9 @@ busboy = require 'connect-busboy'
 streamToArray = require 'stream-to-array'
 Sequelize = require 'sequelize'
 addr = require 'addr'
+crypto = require 'crypto'
+passport = require 'passport'
+passportLocal = require 'passport-local'
 
 crashreportToApiJson = (crashreport) ->
   json = crashreport.toJSON()
@@ -73,6 +77,11 @@ symfileToViewJson = (symfile) ->
 
   return fields
 
+# simple function to check if user is logged in
+isLoggedIn = (req, res, next) ->
+  return next() if !config.get('auth:enabled') || req.isAuthenticated()
+  res.redirect("/login")
+
 # initialization: init db and write all symfiles to disk
 db.sync()
   .then ->
@@ -112,6 +121,8 @@ run = ->
 
   bsStatic = path.resolve(__dirname, '..', 'node_modules/bootstrap/dist')
   breakpad.use '/assets', express.static(bsStatic)
+  cssDirectory = path.resolve(__dirname, '..', 'views', 'css')
+  breakpad.use '/css', express.static(cssDirectory)
 
   # error handler
   app.use (err, req, res, next) ->
@@ -122,6 +133,33 @@ run = ->
     res.status(500).send "Bad things happened:<br/> #{err.message || err}"
 
   breakpad.use(busboy())
+
+  # Authentication
+  if config.get('auth:enabled')
+    staticUser = config.get('auth:username')
+    staticPassword = config.get('auth:password')
+    if !staticUser || !staticPassword
+      throw new Error 'Authentication enabled but username or password not configured'
+
+    passport.use new passportLocal.Strategy (username, password, done) ->
+      # TODO change this to hit a database of users
+      if username != staticUser
+        done null, false
+      if password != staticPassword
+        done null, false
+      done null, user: 'this is the user object'
+
+    passport.serializeUser (user, callback) ->
+      callback null, user
+
+    passport.deserializeUser (user, callback) ->
+      callback null, user
+
+    sessionSecret = crypto.randomBytes(64).toString('hex')
+    breakpad.use expressSession(secret: sessionSecret, resave: true, saveUninitialized: true)
+    breakpad.use passport.initialize()
+    breakpad.use passport.session()
+
   breakpad.post '/crashreports', (req, res, next) ->
     props = {}
     streamOps = []
@@ -160,11 +198,18 @@ run = ->
 
     req.pipe(req.busboy)
 
-  breakpad.get '/', (req, res, next) ->
+  breakpad.get '/login', (req, res, next) ->
+    res.render 'login',
+      serverName: serverName
+      layout: false
+
+  breakpad.post '/auth', passport.authenticate("local", successRedirect:"/", failureRedirect:"/login")
+
+  breakpad.get '/', isLoggedIn, (req, res, next) ->
     res.redirect '/crashreports'
 
   breakpad.use paginate.middleware(10, 50)
-  breakpad.get '/crashreports', (req, res, next) ->
+  breakpad.get '/crashreports', isLoggedIn, (req, res, next) ->
     limit = req.query.limit
     offset = req.offset
     page = req.query.page
@@ -206,7 +251,7 @@ run = ->
           page: page
           pageCount: pageCount
 
-  breakpad.get '/symfiles', (req, res, next) ->
+  breakpad.get '/symfiles', isLoggedIn, (req, res, next) ->
     limit = req.query.limit
     offset = req.offset
     page = req.query.page
@@ -240,7 +285,7 @@ run = ->
           page: page
           pageCount: pageCount
 
-  breakpad.get '/symfiles/:id', (req, res, next) ->
+  breakpad.get '/symfiles/:id', isLoggedIn, (req, res, next) ->
     Symfile.findById(req.params.id).then (symfile) ->
       if not symfile?
         return res.send 404, 'Symfile not found'
@@ -256,7 +301,7 @@ run = ->
           symfile: symfileToViewJson(symfile)
         }
 
-  breakpad.get '/crashreports/:id', (req, res, next) ->
+  breakpad.get '/crashreports/:id', isLoggedIn, (req, res, next) ->
     Crashreport.findById(req.params.id).then (report) ->
       if not report?
         return res.send 404, 'Crash report not found'
@@ -273,7 +318,7 @@ run = ->
           fields: fields
         }
 
-  breakpad.get '/crashreports/:id/stackwalk', (req, res, next) ->
+  breakpad.get '/crashreports/:id/stackwalk', isLoggedIn, (req, res, next) ->
     # give the raw stackwalk
     Crashreport.findById(req.params.id).then (report) ->
       if not report?
@@ -283,7 +328,7 @@ run = ->
         res.set('Content-Type', 'text/plain')
         res.send(stackwalk.toString('utf8'))
 
-  breakpad.get '/crashreports/:id/files/:filefield', (req, res, next) ->
+  breakpad.get '/crashreports/:id/files/:filefield', isLoggedIn, (req, res, next) ->
     # download the file for the given id
     Crashreport.findById(req.params.id).then (crashreport) ->
       if not crashreport?
@@ -302,7 +347,7 @@ run = ->
       res.setHeader('content-disposition', "attachment; filename=\"#{filename}\"")
       res.send(contents)
 
-  breakpad.get '/api/crashreports', (req, res, next) ->
+  breakpad.get '/api/crashreports', isLoggedIn, (req, res, next) ->
     # Query for a count of crash reports matching the requested query parameters
     # e.g. /api/crashreports?version=1.2.3
     where = {}
