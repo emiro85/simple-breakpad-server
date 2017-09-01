@@ -37,7 +37,7 @@ Symfile = sequelize.define('symfiles', schema, options)
 
 Symfile.getAllSymfiles = (limit, offset, callback) ->
   findAllQuery =
-    order: 'created_at DESC'
+    order: [['created_at', 'DESC']]
     limit: limit
     offset: offset
 

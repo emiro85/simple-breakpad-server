@@ -42,7 +42,7 @@ Crashreport.getAllReports = (limit, offset, callback) ->
       attributes.push name
 
   findAllQuery =
-    order: 'created_at DESC'
+    order: [['created_at', 'DESC']]
     limit: limit
     offset: offset
     attributes: attributes
