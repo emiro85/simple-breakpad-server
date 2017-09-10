@@ -14,9 +14,7 @@ Symfile = require './model/symfile'
 db = require './model/db'
 titleCase = require 'title-case'
 busboy = require 'connect-busboy'
-streamToArray = require 'stream-to-array'
 Sequelize = require 'sequelize'
-addr = require 'addr'
 crypto = require 'crypto'
 passport = require 'passport'
 passportLocal = require 'passport-local'
@@ -184,42 +182,9 @@ run = ->
     breakpad.use passport.session()
 
   breakpad.post '/crashreports', (req, res, next) ->
-    props = {}
-    streamOps = []
-    # Get originating request address, respecting reverse proxies (e.g.
-    #   X-Forwarded-For header)
-    # Fixed list of just localhost as trusted reverse-proxy, we can add
-    #   a config option if needed
-    props.ip = addr(req, ['127.0.0.1', '::ffff:127.0.0.1'])
-
-    req.busboy.on 'file', (fieldname, file, filename, encoding, mimetype) ->
-      streamOps.push streamToArray(file).then((parts) ->
-        buffers = []
-        for i in [0 .. parts.length - 1]
-          part = parts[i]
-          buffers.push if part instanceof Buffer then part else new Buffer(part)
-
-        return Buffer.concat(buffers)
-      ).then (buffer) ->
-        if fieldname of Crashreport.attributes
-          props[fieldname] = buffer
-
-    req.busboy.on 'field', (fieldname, val, fieldnameTruncated, valTruncated) ->
-      if fieldname == 'prod'
-        props['product'] = val
-      else if fieldname == 'ver'
-        props['version'] = val
-      else if fieldname of Crashreport.attributes
-        props[fieldname] = val.toString()
-
-    req.busboy.on 'finish', ->
-      Promise.all(streamOps).then ->
-        Crashreport.create(props).then (report) ->
-          res.json(crashreportToApiJson(report))
-      .catch (err) ->
-        next err
-
-    req.pipe(req.busboy)
+    Crashreport.createFromRequest req, res, (err, report) ->
+      return next(err) if err?
+      res.json(crashreportToApiJson(report))
 
   breakpad.get '/login', (req, res, next) ->
     res.render 'login',
