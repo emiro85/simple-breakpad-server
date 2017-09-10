@@ -89,6 +89,19 @@ Crashreport.createFromRequest = (req, res, callback) ->
 
   req.busboy.on 'finish', ->
     Promise.all(streamOps).then ->
+
+      if not props.hasOwnProperty('upload_file_minidump')
+        res.status 400
+        throw new Error 'Form must include a "upload_file_minidump" field'
+
+      if not props.hasOwnProperty('version')
+        res.status 400
+        throw new Error 'Form must include a "ver" field'
+
+      if not props.hasOwnProperty('product')
+        res.status 400
+        throw new Error 'Form must include a "prod" field'
+
       Crashreport.create(props).then (report) ->
         callback(null, report)
     .catch (err) ->
