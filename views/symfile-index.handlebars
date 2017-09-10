@@ -16,11 +16,11 @@
       <td>
         <a href="{{symfileUrl this.id}}">view</a>
       </td>
-    {{#each this.props}}
+    {{#eachInMap this.props}}
       <td>
         {{this}}
       </td>
-    {{/each}}
+    {{/eachInMap}}
     </tr>
   {{/each}}
 </table>

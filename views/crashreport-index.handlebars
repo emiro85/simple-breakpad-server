@@ -16,7 +16,7 @@
       <td>
         <a href="{{reportUrl this.id}}">view</a>
       </td>
-    {{#each this.props}}
+    {{#eachInMap this.props}}
       <td>
         {{#if this.path}}
           <a href="{{this.path}}">download</a>
@@ -24,7 +24,7 @@
         {{this}}
         {{/if}}
       </td>
-    {{/each}}
+    {{/eachInMap}}
     </tr>
   {{/each}}
 </table>

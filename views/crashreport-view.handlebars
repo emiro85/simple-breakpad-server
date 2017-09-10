@@ -2,7 +2,7 @@
   <h1>Crash Report <small>{{product}} v{{version}}</small></h1>
 </div>
 <dl class="dl-horizontal">
-  {{#each fields}}
+  {{#eachInMap fields}}
     <dt>{{titleCase @key}}</dt>
     <dd>
     {{#if this.path}}
@@ -11,7 +11,7 @@
     {{this}}
     {{/if}}
     </dd>
-  {{/each}}
+  {{/eachInMap}}
 </dl>
 <h2>Stackwalk</h2>
 <pre><code>

@@ -34,9 +34,13 @@ nconf.defaults
     logging: no
   auth:
     enabled: false
+  crashreports:
+    order: ['upload_file_minidump', 'product', 'version', 'ip', 'created']
   customFields:
     files: []
     params: []
+  symbols:
+    order: ['os', 'name', 'arch', 'code', 'created' ]
   dataDir: SBS_HOME
 
 # Post-process custom files and params

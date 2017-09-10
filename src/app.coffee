@@ -32,11 +32,13 @@ crashreportToViewJson = (report) ->
   hidden = ['id', 'updated_at']
   fields =
     id: report.id
-    props: {}
+    props: new Map()
+
+  unorderedProps = {}
 
   for name, value of Crashreport.attributes
     if value.type instanceof Sequelize.BLOB
-      fields.props[name] = { path: "/crashreports/#{report.id}/files/#{name}" }
+      unorderedProps[name] = { path: "/crashreports/#{report.id}/files/#{name}" }
 
   json = report.toJSON()
   for k,v of json
@@ -46,11 +48,23 @@ crashreportToViewJson = (report) ->
       # already handled
     else if k == 'created_at'
       # change the name of this key for display purposes
-      fields.props['created'] = moment(v).fromNow()
+      unorderedProps['created'] = moment(v).fromNow()
     else if v instanceof Date
-      fields.props[k] = moment(v).fromNow()
+      unorderedProps[k] = moment(v).fromNow()
     else
-      fields.props[k] = if v? then v else 'not present'
+      unorderedProps[k] = if v? then v else 'not present'
+
+  # Sorting
+  sortable = []
+  for key of unorderedProps
+    if !unorderedProps.hasOwnProperty(key)
+      continue
+    sortable.push(key)
+  order = config.get('crashreports:order') || []
+  sortable.sort (a, b) ->
+    return order.indexOf(a) - order.indexOf(b)
+  sortable.map (key) ->
+    fields.props.set(key, unorderedProps[key])
 
   return fields
 
@@ -59,8 +73,9 @@ symfileToViewJson = (symfile) ->
   fields =
     id: symfile.id
     contents: symfile.contents
-    props: {}
+    props: new Map()
 
+  unorderedProps = {}
   json = symfile.toJSON()
 
   for k,v of json
@@ -68,11 +83,23 @@ symfileToViewJson = (symfile) ->
       # pass
     else if k == 'created_at'
       # change the name of this key for display purposes
-      fields.props['created'] = moment(v).fromNow()
+      unorderedProps['created'] = moment(v).fromNow()
     else if v instanceof Date
-      fields.props[k] = moment(v).fromNow()
+      unorderedProps[k] = moment(v).fromNow()
     else
-      fields.props[k] = if v? then v else 'not present'
+      unorderedProps[k] = if v? then v else 'not present'
+
+  # Sorting
+  sortable = []
+  for key of unorderedProps
+    if !unorderedProps.hasOwnProperty(key)
+      continue
+    sortable.push(key)
+  order = config.get('symbols:order') || []
+  sortable.sort (a, b) ->
+    return order.indexOf(a) - order.indexOf(b)
+  sortable.map (key) ->
+    fields.props.set(key, unorderedProps[key])
 
   return fields
 
@@ -206,11 +233,10 @@ run = ->
       pageCount = Math.ceil(count / limit)
       viewReports = records.map(crashreportToViewJson)
 
-      fields =
-        if viewReports.length
-          Object.keys(viewReports[0].props)
-        else
-          []
+      fields = []
+      if viewReports.length
+        viewReports[0].props.forEach (value, key) ->
+          fields.push(key)
 
       res.render 'crashreport-index',
         serverName: serverName
@@ -232,11 +258,10 @@ run = ->
       pageCount = Math.ceil(count / limit)
       viewSymfiles = records.map(symfileToViewJson)
 
-      fields =
-        if viewSymfiles.length
-          Object.keys(viewSymfiles[0].props)
-        else
-          []
+      fields = []
+      if viewSymfiles.length
+        viewSymfiles[0].props.forEach (value, key) ->
+          fields.push(key)
 
       res.render 'symfile-index',
         serverName: serverName
@@ -259,10 +284,12 @@ run = ->
         res.send(symfile.contents.toString())
         res.end()
       else
+        symfile = symfileToViewJson(symfile)
         res.render 'symfile-view', {
           serverName: serverName
           title: 'Symfile'
-          symfile: symfileToViewJson(symfile)
+          symbolName: symfile.props.get('name')
+          symfile: symfile
         }
 
   breakpad.get '/crashreports/:id', isLoggedIn, (req, res, next) ->
@@ -277,8 +304,8 @@ run = ->
           serverName: serverName
           title: 'Crash Report'
           stackwalk: stackwalk
-          product: fields.product
-          version: fields.version
+          product: fields.get('product')
+          version: fields.get('version')
           fields: fields
         }
 
