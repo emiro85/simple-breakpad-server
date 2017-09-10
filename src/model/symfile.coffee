@@ -9,34 +9,84 @@ streamToArray = require 'stream-to-array'
 symbolsPath = config.getSymbolsPath()
 COMPOSITE_INDEX = 'compositeIndex'
 
+Os = sequelize.define('symfile_os',
+  id:
+    type: Sequelize.INTEGER
+    autoIncrement: yes
+    primaryKey: yes
+  value:
+    type: Sequelize.STRING
+)
+
+Name = sequelize.define('symfile_name',
+  id:
+    type: Sequelize.INTEGER
+    autoIncrement: yes
+    primaryKey: yes
+  value:
+    type: Sequelize.STRING
+)
+
+Arch = sequelize.define('symfile_arch',
+  id:
+    type: Sequelize.INTEGER
+    autoIncrement: yes
+    primaryKey: yes
+  value:
+    type: Sequelize.STRING
+)
+
 schema =
   id:
     type: Sequelize.INTEGER
     autoIncrement: yes
     primaryKey: yes
-  os:
-    type: Sequelize.STRING
+  os_id:
+    type: Sequelize.INTEGER
     unique: COMPOSITE_INDEX
-  name:
-    type: Sequelize.STRING
+  name_id:
+    type: Sequelize.INTEGER
+    unique: COMPOSITE_INDEX
+  arch_id:
+    type: Sequelize.INTEGER
     unique: COMPOSITE_INDEX
   code:
     type: Sequelize.STRING
     unique: COMPOSITE_INDEX
-  arch:
-    type: Sequelize.STRING
-    unique: COMPOSITE_INDEX
   contents: Sequelize.TEXT
 
-options =
+Symfile = sequelize.define('symfiles',
+  schema,
   indexes: [
     { fields: ['created_at'] }
+  ])
+
+include = [
+  { model: Name, as: 'name'}
+  { model: Os, as: 'os' }
+  { model: Arch, as: 'arch' }
   ]
 
-Symfile = sequelize.define('symfiles', schema, options)
+exclude = ['os_id', 'arch_id', 'name_id']
+
+Symfile.belongsTo(Os, foreignKey: 'os_id', as: 'os')
+Os.hasMany(Symfile, foreignKey: 'os_id', as: 'os')
+Symfile.belongsTo(Name, foreignKey: 'name_id', as: 'name')
+Name.hasMany(Symfile, foreignKey: 'name_id', as: 'name')
+Symfile.belongsTo(Arch, foreignKey: 'arch_id', as: 'arch')
+Arch.hasMany(Symfile, foreignKey: 'arch_id', as: 'arch')
 
 Symfile.findFileById = (param) ->
-  options = {}
+  include = [
+    { model: Name, as: 'name'}
+    { model: Os, as: 'os' }
+    { model: Arch, as: 'arch' }
+  ]
+
+  options =
+    include: include
+    attributes:
+      exclude: exclude
   Symfile.findById(param, options)
 
 Symfile.getAllSymfiles = (limit, offset, callback) ->
@@ -44,6 +94,9 @@ Symfile.getAllSymfiles = (limit, offset, callback) ->
     order: [['created_at', 'DESC']]
     limit: limit
     offset: offset
+    include: include
+    attributes:
+      exclude: exclude
 
   Symfile.findAndCountAll(findAllQuery).then (q) ->
     records = q.rows
@@ -51,21 +104,27 @@ Symfile.getAllSymfiles = (limit, offset, callback) ->
     callback(records, count)
 
 Symfile.saveToDisk = (symfile) ->
-  symfileDir = path.join(symbolsPath, symfile.name, symfile.code)
+  symbolName = symfile.name.value
+  symfileDir = path.join(symbolsPath, symbolName, symfile.code)
+
   fs.mkdirs(symfileDir).then ->
     # From https://chromium.googlesource.com/breakpad/breakpad/+/master/src/processor/simple_symbol_supplier.cc#179:
     # Transform the debug file name into one ending in .sym.  If the existing
     #   name ends in .pdb, strip the .pdb.  Otherwise, add .sym to the non-.pdb
     #   name.
-    symbol_name = symfile.name
-    if path.extname(symbol_name).toLowerCase() == '.pdb'
-      symbol_name = symbol_name.slice(0, -4)
-    symbol_name += '.sym'
-    filePath = path.join(symfileDir, symbol_name)
+    if path.extname(symbolName).toLowerCase() == '.pdb'
+      symbolName = symbolName.slice(0, -4)
+    symbolName += '.sym'
+    filePath = path.join(symfileDir, symbolName)
     fs.writeFile(filePath, symfile.contents)
 
 Symfile.saveAllToDisk = () ->
-  Symfile.findAll().then (symfiles) ->
+  include = [
+    { model: Name, as: 'name'}
+    { model: Os, as: 'os' }
+    { model: Arch, as: 'arch' }
+  ]
+  Symfile.findAll(include: include).then (symfiles) ->
     Promise.all(symfiles.map((s) -> Symfile.saveToDisk(s)))
 
 Symfile.createFromRequest = (req, res, callback) ->
@@ -99,28 +158,44 @@ Symfile.createFromRequest = (req, res, callback) ->
         msg = 'Could not parse header (expecting MODULE as first line)'
         throw new Error msg
 
-      props =
-        os: os
-        arch: arch
-        code: code
-        name: name
-        contents: contents
-
       sequelize.transaction (t) ->
-        whereDuplicated =
-          where: { os: os, arch: arch, code: code, name: name}
+        # The following section cannot be simplified by a Symfile.create with nested associations, since the associated
+        # models will always create a new row and not reference an existing one.
+        # If somebody can find an easier way, feel free to refactor the section.
+        allPromises = []
+        allPromises.push(Os.findOrCreate({where: {value: os}, transaction: t}))
+        allPromises.push(Name.findOrCreate({where: {value: name}, transaction: t}))
+        allPromises.push(Arch.findOrCreate({where: {value: arch}, transaction: t}))
+        Sequelize.Promise.all(allPromises).then (results) ->
+          os = results[0][0]
+          name = results[1][0]
+          arch = results[2][0]
+          props =
+            os_id: os.id
+            name_id: name.id
+            arch_id: arch.id
+            code: code
+            contents: contents
 
-        Symfile.findOne(whereDuplicated, {transaction: t}).then (duplicate) ->
-          p =
-            if duplicate?
-              duplicate.destroy({transaction: t})
-            else
-              Promise.resolve()
-          p.then ->
-            Symfile.create(props, {transaction: t}).then (symfile) ->
-              Symfile.saveToDisk(symfile).then ->
-                cache.clear()
-                callback(null, symfile)
+          Symfile.findOne(where: props, transaction: t).then (duplicate) ->
+            p =
+              if duplicate?
+                duplicate.destroy(transaction: t)
+              else
+                Promise.resolve()
+            p.then ->
+              Symfile.create(props, transaction: t).then () ->
+                query =
+                  where: props
+                  include: include
+                  attributes:
+                    exclude: exclude
+                  transaction: t
+                # Run findOne again to get the full object back with all references resolved
+                Symfile.findOne(query).then (symfile) ->
+                  Symfile.saveToDisk(symfile).then ->
+                    cache.clear()
+                    callback(null, symfile)
 
     .catch (err) ->
       callback err
