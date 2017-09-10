@@ -12,7 +12,7 @@ streamToArray = require 'stream-to-array'
 symbolsPath = config.getSymbolsPath()
 
 # custom fields should have 'files' and 'params'
-customFields = config.get('customFields') || {}
+customFields = config.get('crashreports:customFields') || {}
 
 schema =
   id:

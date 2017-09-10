@@ -36,15 +36,15 @@ nconf.defaults
     enabled: false
   crashreports:
     order: ['upload_file_minidump', 'product', 'version', 'ip', 'created']
-  customFields:
-    files: []
-    params: []
+    customFields:
+      files: []
+      params: []
   symbols:
     order: ['os', 'name', 'arch', 'code', 'created' ]
   dataDir: SBS_HOME
 
 # Post-process custom files and params
-customFields = nconf.get('customFields')
+customFields = nconf.get('crashreports:customFields')
 
 # Ensure array
 customFields.files = customFields.files || []
@@ -75,7 +75,7 @@ for field, idx in customFields.params
       name: field
   customFields.paramsById[customFields.params[idx].name] = customFields.params[idx]
 
-nconf.set('customFields', customFields)
+nconf.set('crashreports:customFields', customFields)
 
 nconf.getSymbolsPath = -> path.join(nconf.get('dataDir'), 'symbols')
 
