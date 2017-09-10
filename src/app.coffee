@@ -250,7 +250,7 @@ run = ->
           pageCount: pageCount
 
   breakpad.get '/symfiles/:id', isLoggedIn, (req, res, next) ->
-    Symfile.findById(req.params.id).then (symfile) ->
+    Symfile.findFileById(req.params.id).then (symfile) ->
       if not symfile?
         return res.send 404, 'Symfile not found'
 
@@ -266,7 +266,7 @@ run = ->
         }
 
   breakpad.get '/crashreports/:id', isLoggedIn, (req, res, next) ->
-    Crashreport.findById(req.params.id).then (report) ->
+    Crashreport.findReportById(req.params.id).then (report) ->
       if not report?
         return res.send 404, 'Crash report not found'
       Crashreport.getStackTrace report, (err, stackwalk) ->
@@ -284,7 +284,7 @@ run = ->
 
   breakpad.get '/crashreports/:id/stackwalk', isLoggedIn, (req, res, next) ->
     # give the raw stackwalk
-    Crashreport.findById(req.params.id).then (report) ->
+    Crashreport.findReportById(req.params.id).then (report) ->
       if not report?
         return res.send 404, 'Crash report not found'
       Crashreport.getStackTrace report, (err, stackwalk) ->
@@ -294,7 +294,7 @@ run = ->
 
   breakpad.get '/crashreports/:id/files/:filefield', isLoggedIn, (req, res, next) ->
     # download the file for the given id
-    Crashreport.findById(req.params.id).then (crashreport) ->
+    Crashreport.findReportById(req.params.id).then (crashreport) ->
       if not crashreport?
         return res.status(404).send 'Crash report not found'
 

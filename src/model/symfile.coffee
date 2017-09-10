@@ -35,6 +35,10 @@ options =
 
 Symfile = sequelize.define('symfiles', schema, options)
 
+Symfile.findFileById = (param) ->
+  options = {}
+  Symfile.findById(param, options)
+
 Symfile.getAllSymfiles = (limit, offset, callback) ->
   findAllQuery =
     order: [['created_at', 'DESC']]

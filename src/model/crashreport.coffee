@@ -35,6 +35,10 @@ for field in customFields.files
 
 Crashreport = sequelize.define('crashreports', schema, options)
 
+Crashreport.findReportById = (param) ->
+  options = {}
+  Crashreport.findById(param, options)
+
 Crashreport.getAllReports = (limit, offset, callback) ->
   attributes = []
 
