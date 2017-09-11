@@ -89,7 +89,24 @@ Symfile.findFileById = (param) ->
       exclude: exclude
   Symfile.findById(param, options)
 
-Symfile.getAllSymfiles = (limit, offset, callback) ->
+Symfile.getAllSymfiles = (limit, offset, query, callback) ->
+  include = []
+
+  nameInclude = { model: Name, as: 'name'}
+  if 'name' of query && !!query['name']
+    nameInclude['where'] =  { value: query['name'] }
+  include.push(nameInclude)
+
+  osInclude = { model: Os, as: 'os'}
+  if 'os' of query && !!query['os']
+    osInclude['where'] =  { value: query['os'] }
+  include.push(osInclude)
+
+  archInclude = { model: Arch, as: 'arch'}
+  if 'arch' of query && !!query['arch']
+    archInclude['where'] =  { value: query['arch'] }
+  include.push(archInclude)
+
   findAllQuery =
     order: [['created_at', 'DESC']]
     limit: limit
@@ -102,6 +119,30 @@ Symfile.getAllSymfiles = (limit, offset, callback) ->
     records = q.rows
     count = q.count
     callback(records, count)
+
+Symfile.getAllQueryParameters = (callback) ->
+  allPromises = []
+  allPromises.push(Os.findAll())
+  allPromises.push(Name.findAll())
+  allPromises.push(Arch.findAll())
+  queryParameters = {}
+  Sequelize.Promise.all(allPromises).then (results) ->
+    values = []
+    for os in results[0]
+      values.push(os.value)
+    queryParameters['os'] = values
+
+    values = []
+    for name in results[1]
+      values.push(name.value)
+    queryParameters['name'] = values
+
+    values = []
+    for arch in results[2]
+      values.push(arch.value)
+    queryParameters['arch'] = values
+
+    callback(queryParameters)
 
 Symfile.saveToDisk = (symfile) ->
   symbolName = symfile.name.value

@@ -26,7 +26,7 @@
     "express-paginate": "^0.2.2",
     "express-session": "^1.15.5",
     "fs-promise": "^1.0.0",
-    "handlebars-paginate": "^0.1.0",
+    "handlebars-paginate": "emiro85/handlebars-paginate#query_parameters",
     "method-override": "^2.3.6",
     "minidump": "^0.11.0",
     "moment": "^2.16.0",

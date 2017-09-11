@@ -258,7 +258,7 @@ run = ->
     offset = req.offset
     page = req.query.page
 
-    Symfile.getAllSymfiles limit, offset, (records, count) ->
+    Symfile.getAllSymfiles limit, offset, req.query, (records, count) ->
       pageCount = Math.ceil(count / limit)
       viewSymfiles = records.map(symfileToViewJson)
 
@@ -277,6 +277,14 @@ run = ->
           hide: pageCount <= 1
           page: page
           pageCount: pageCount
+          query: req.query
+
+  breakpad.get '/symfiles/query', isLoggedIn, (req, res, next) ->
+    Symfile.getAllQueryParameters (params) ->
+      res.render 'symfile-query', {
+        serverName: serverName
+        params: params
+      }
 
   breakpad.get '/symfiles/:id', isLoggedIn, (req, res, next) ->
     Symfile.findFileById(req.params.id).then (symfile) ->
