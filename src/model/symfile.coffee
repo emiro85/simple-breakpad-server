@@ -76,12 +76,36 @@ Name.hasMany(Symfile, foreignKey: 'name_id', as: 'name')
 Symfile.belongsTo(Arch, foreignKey: 'arch_id', as: 'arch')
 Arch.hasMany(Symfile, foreignKey: 'arch_id', as: 'arch')
 
+customSymbolFields = config.get('symbols:customFields') || {}
+CustomFields = []
+for i in [0...customSymbolFields.params.length]
+  alias = customSymbolFields.params[i]
+  param = 'symfile_' + alias
+  customField = sequelize.define( param,
+    id:
+      type: Sequelize.INTEGER
+      autoIncrement: yes
+      primaryKey: yes
+    value:
+      type: Sequelize.STRING
+  )
+  foreignKey = alias + '_id'
+  Symfile.belongsTo(customField, foreignKey: foreignKey, as: alias)
+  customField.hasMany(Symfile, foreignKey: foreignKey, as: alias)
+  CustomFields.push(customField)
+  exclude.push(foreignKey)
+
 Symfile.findFileById = (param) ->
   include = [
     { model: Name, as: 'name'}
     { model: Os, as: 'os' }
     { model: Arch, as: 'arch' }
   ]
+
+  CustomFields.map (customField) ->
+    alias = getAliasFromDbName(customField.name)
+    customInclude = { model: customField, as: alias }
+    include.push(customInclude)
 
   options =
     include: include
@@ -107,6 +131,13 @@ Symfile.getAllSymfiles = (limit, offset, query, callback) ->
     archInclude['where'] =  { value: query['arch'] }
   include.push(archInclude)
 
+  CustomFields.map (customField) ->
+    alias = getAliasFromDbName(customField.name)
+    customInclude = { model: customField, as: alias }
+    if alias of query && !!query[alias]
+      customInclude['where'] =  { value: query[alias] }
+    include.push(customInclude)
+
   findAllQuery =
     order: [['created_at', 'DESC']]
     limit: limit
@@ -125,6 +156,9 @@ Symfile.getAllQueryParameters = (callback) ->
   allPromises.push(Os.findAll())
   allPromises.push(Name.findAll())
   allPromises.push(Arch.findAll())
+  CustomFields.map((customField) ->
+    allPromises.push(customField.findAll())
+  )
   queryParameters = {}
   Sequelize.Promise.all(allPromises).then (results) ->
     values = []
@@ -141,6 +175,12 @@ Symfile.getAllQueryParameters = (callback) ->
     for arch in results[2]
       values.push(arch.value)
     queryParameters['arch'] = values
+
+    for i in [0...CustomFields.length]
+      values = []
+      for field in results[i+3]
+        values.push(field.value)
+      queryParameters[getAliasFromDbName(CustomFields[i].name)] = values
 
     callback(queryParameters)
 
@@ -168,9 +208,14 @@ Symfile.saveAllToDisk = () ->
   Symfile.findAll(include: include).then (symfiles) ->
     Promise.all(symfiles.map((s) -> Symfile.saveToDisk(s)))
 
+getAliasFromDbName = (dbName) ->
+  alias = dbName.substring(dbName.lastIndexOf('_') + 1)
+  return alias
+
 Symfile.createFromRequest = (req, res, callback) ->
   props = {}
   streamOps = []
+  httpPostFields = {}
 
   req.busboy.on 'file', (fieldname, file, filename, encoding, mimetype) ->
     streamOps.push streamToArray(file).then((parts) ->
@@ -183,6 +228,9 @@ Symfile.createFromRequest = (req, res, callback) ->
     ).then (buffer) ->
       if fieldname == 'symfile'
         props[fieldname] = buffer.toString()
+
+  req.busboy.on 'field', (fieldname, val, fieldnameTruncated, valTruncated) ->
+    httpPostFields[fieldname] = val.toString()
 
   req.busboy.on 'finish', ->
     Promise.all(streamOps).then ->
@@ -207,6 +255,13 @@ Symfile.createFromRequest = (req, res, callback) ->
         allPromises.push(Os.findOrCreate({where: {value: os}, transaction: t}))
         allPromises.push(Name.findOrCreate({where: {value: name}, transaction: t}))
         allPromises.push(Arch.findOrCreate({where: {value: arch}, transaction: t}))
+        postedFieldNames = []
+        CustomFields.map((customField) ->
+          fieldName = getAliasFromDbName(customField.name)
+          if fieldName of httpPostFields
+            postedFieldNames.push(fieldName)
+            allPromises.push(customField.findOrCreate({where: {value: httpPostFields[fieldName]},transaction: t}))
+        )
         Sequelize.Promise.all(allPromises).then (results) ->
           os = results[0][0]
           name = results[1][0]
@@ -216,7 +271,6 @@ Symfile.createFromRequest = (req, res, callback) ->
             name_id: name.id
             arch_id: arch.id
             code: code
-            contents: contents
 
           Symfile.findOne(where: props, transaction: t).then (duplicate) ->
             p =
@@ -225,13 +279,28 @@ Symfile.createFromRequest = (req, res, callback) ->
               else
                 Promise.resolve()
             p.then ->
+              props['contents'] = contents
+              for i in [3...allPromises.length]
+                if !results[i]
+                  continue
+                customFieldId = postedFieldNames[i-3] + '_id'
+                customField = results[i][0]
+                props[customFieldId] = customField.id
               Symfile.create(props, transaction: t).then () ->
+                include = [
+                  { model: Name, as: 'name'}
+                  { model: Os, as: 'os' }
+                  { model: Arch, as: 'arch' }
+                ]
                 query =
                   where: props
                   include: include
                   attributes:
                     exclude: exclude
                   transaction: t
+                CustomFields.map (customField) ->
+                  customInclude = { model: customField, as: getAliasFromDbName(customField.name) }
+                  query.include.push(customInclude)
                 # Run findOne again to get the full object back with all references resolved
                 Symfile.findOne(query).then (symfile) ->
                   Symfile.saveToDisk(symfile).then ->

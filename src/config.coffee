@@ -41,6 +41,8 @@ nconf.defaults
       params: []
   symbols:
     order: ['os', 'name', 'arch', 'code', 'created' ]
+    customFields:
+      params: []
   dataDir: SBS_HOME
 
 # Post-process custom files and params
