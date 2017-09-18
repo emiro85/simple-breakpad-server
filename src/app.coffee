@@ -51,6 +51,8 @@ crashreportToViewJson = (report) ->
       unorderedProps['created'] = moment(v).fromNow()
     else if v instanceof Date
       unorderedProps[k] = moment(v).fromNow()
+    else if v isnt null && typeof v == 'object'
+      unorderedProps[k] = v.value
     else
       unorderedProps[k] = if v? then v else 'not present'
 

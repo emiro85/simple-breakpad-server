@@ -14,13 +14,33 @@ symbolsPath = config.getSymbolsPath()
 # custom fields should have 'files' and 'params'
 customFields = config.get('crashreports:customFields') || {}
 
+Product = sequelize.define('crashreport_product',
+  id:
+    type: Sequelize.INTEGER
+    autoIncrement: yes
+    primaryKey: yes
+  value:
+    type: Sequelize.STRING
+)
+
+Version = sequelize.define('crashreport_version',
+  id:
+    type: Sequelize.INTEGER
+    autoIncrement: yes
+    primaryKey: yes
+  value:
+    type: Sequelize.STRING
+)
+
 schema =
   id:
     type: Sequelize.INTEGER
     autoIncrement: yes
     primaryKey: yes
-  product: Sequelize.STRING
-  version: Sequelize.STRING
+  product_id:
+    type: Sequelize.INTEGER
+  version_id:
+    type: Sequelize.INTEGER
   ip:
     type: Sequelize.STRING
 
@@ -29,31 +49,82 @@ options =
     { fields: ['created_at'] }
   ]
 
-for field in customFields.params
-  schema[field.name] = Sequelize.STRING
-
 for field in customFields.files
   schema[field.name] = Sequelize.BLOB
 
 Crashreport = sequelize.define('crashreports', schema, options)
 
+exclude = ['product_id', 'version_id']
+
+Crashreport.belongsTo(Product, foreignKey: 'product_id', as: 'product')
+Product.hasMany(Crashreport, foreignKey: 'product_id', as: 'product')
+Crashreport.belongsTo(Version, foreignKey: 'version_id', as: 'version')
+Version.hasMany(Crashreport, foreignKey: 'version_id', as: 'version')
+
+getAliasFromDbName = (dbName) ->
+  alias = dbName.substring(dbName.lastIndexOf('_') + 1)
+  return alias
+
+CustomFields = []
+customFields.params.map (alias) ->
+  param = 'crashreport_' + alias.name
+  customField = sequelize.define( param,
+    id:
+      type: Sequelize.INTEGER
+      autoIncrement: yes
+      primaryKey: yes
+    value:
+      type: Sequelize.STRING
+  )
+  foreignKey = alias.name + '_id'
+  Crashreport.belongsTo(customField, foreignKey: foreignKey, as: alias.name)
+  customField.hasMany(Crashreport, foreignKey: foreignKey, as: alias.name)
+  CustomFields.push(customField)
+  exclude.push(foreignKey)
+
+Sequelize.sync
+
 Crashreport.findReportById = (param) ->
-  options = {}
+  include = [
+    { model: Product, as: 'product'}
+    { model: Version, as: 'version' }
+  ]
+
+  CustomFields.map (customField) ->
+    alias = getAliasFromDbName(customField.name)
+    customInclude = { model: customField, as: alias }
+    include.push(customInclude)
+
+  options =
+    include: include
+    attributes:
+      exclude: exclude
   Crashreport.findById(param, options)
 
 Crashreport.getAllReports = (limit, offset, callback) ->
-  attributes = []
-
+  include = []
   # only fetch non-blob attributes to speed up the query
-  for name, value of Crashreport.attributes
-    unless value.type instanceof Sequelize.BLOB
-      attributes.push name
+  excludeWithBlob = ['product_id', 'version_id', 'upload_file_minidump']
+
+  productInclude = { model: Product, as: 'product'}
+  include.push(productInclude)
+
+  versionInclude = { model: Version, as: 'version'}
+  include.push(versionInclude)
+
+  CustomFields.map (customField) ->
+    alias = getAliasFromDbName(customField.name)
+    customInclude = { model: customField, as: alias }
+    include.push(customInclude)
+    excludeWithBlob.push(alias + '_id')
 
   findAllQuery =
     order: [['created_at', 'DESC']]
     limit: limit
     offset: offset
-    attributes: attributes
+    attributes:
+      exclude: excludeWithBlob
+    include: include
 
   Crashreport.findAndCountAll(findAllQuery).then (q) ->
     records = q.rows
@@ -63,6 +134,10 @@ Crashreport.getAllReports = (limit, offset, callback) ->
 Crashreport.createFromRequest = (req, res, callback) ->
   props = {}
   streamOps = []
+  httpPostFields = {}
+  product = undefined
+  version = undefined
+
   # Get originating request address, respecting reverse proxies (e.g.
   #   X-Forwarded-For header)
   # Fixed list of just localhost as trusted reverse-proxy, we can add
@@ -83,11 +158,11 @@ Crashreport.createFromRequest = (req, res, callback) ->
 
   req.busboy.on 'field', (fieldname, val, fieldnameTruncated, valTruncated) ->
     if fieldname == 'prod'
-      props['product'] = val
+      product = val
     else if fieldname == 'ver'
-      props['version'] = val
-    else if fieldname of Crashreport.attributes
-      props[fieldname] = val.toString()
+      version = val
+    else
+      httpPostFields[fieldname] = val.toString()
 
   req.busboy.on 'finish', ->
     Promise.all(streamOps).then ->
@@ -96,16 +171,54 @@ Crashreport.createFromRequest = (req, res, callback) ->
         res.status 400
         throw new Error 'Form must include a "upload_file_minidump" field'
 
-      if not props.hasOwnProperty('version')
+      if not version
         res.status 400
         throw new Error 'Form must include a "ver" field'
 
-      if not props.hasOwnProperty('product')
+      if not product
         res.status 400
         throw new Error 'Form must include a "prod" field'
 
-      Crashreport.create(props).then (report) ->
-        callback(null, report)
+      sequelize.transaction (t) ->
+        allPromises = []
+        allPromises.push(Product.findOrCreate({where: {value: product}, transaction: t}))
+        allPromises.push(Version.findOrCreate({where: {value: version}, transaction: t}))
+        postedFieldNames = []
+        CustomFields.map (customField) ->
+          fieldName = getAliasFromDbName(customField.name)
+          if fieldName of httpPostFields
+            postedFieldNames.push(fieldName)
+            allPromises.push(customField.findOrCreate({where: {value: httpPostFields[fieldName]},transaction: t}))
+
+        Sequelize.Promise.all(allPromises).then (results) ->
+
+          props.product_id = results[0][0].id
+          props.version_id = results[1][0].id
+          for i in [2...allPromises.length]
+            if !results[i]
+              continue
+            customFieldId = postedFieldNames[i-2] + '_id'
+            customField = results[i][0]
+            props[customFieldId] = customField.id
+
+          include = [
+            { model: Product, as: 'product'}
+            { model: Version, as: 'version' }
+          ]
+          CustomFields.map (customField) ->
+            customInclude = { model: customField, as: getAliasFromDbName(customField.name) }
+            include.push(customInclude)
+
+          Crashreport.create(props, include: include, transaction: t).then (report) ->
+            query =
+              where: props
+              include: include
+              attributes:
+                exclude: exclude
+              transaction: t
+            Crashreport.findOne(query).then (report) ->
+              callback(null, report)
+
     .catch (err) ->
       callback err
 
