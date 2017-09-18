@@ -21,6 +21,8 @@ schema =
     primaryKey: yes
   product: Sequelize.STRING
   version: Sequelize.STRING
+  ip:
+    type: Sequelize.STRING
 
 options =
   indexes: [

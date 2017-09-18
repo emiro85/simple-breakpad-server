@@ -63,10 +63,7 @@ for field, idx in customFields.files
 
 # Ensure array
 customFields.params = customFields.params || []
-# Always add ip as first params
-customFields.params.splice(0, 0,
-  name: 'ip'
-)
+
 # Ensure array members are objects and build lookup
 customFields.paramsById = {}
 for field, idx in customFields.params
