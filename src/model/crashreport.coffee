@@ -101,20 +101,26 @@ Crashreport.findReportById = (param) ->
       exclude: exclude
   Crashreport.findById(param, options)
 
-Crashreport.getAllReports = (limit, offset, callback) ->
+Crashreport.getAllReports = (limit, offset, query, callback) ->
   include = []
   # only fetch non-blob attributes to speed up the query
   excludeWithBlob = ['product_id', 'version_id', 'upload_file_minidump']
 
   productInclude = { model: Product, as: 'product'}
+  if 'product' of query && !!query['product']
+    productInclude['where'] =  { value: query['product'] }
   include.push(productInclude)
 
   versionInclude = { model: Version, as: 'version'}
+  if 'version' of query && !!query['version']
+    versionInclude['where'] =  { value: query['version'] }
   include.push(versionInclude)
 
   CustomFields.map (customField) ->
     alias = getAliasFromDbName(customField.name)
     customInclude = { model: customField, as: alias }
+    if alias of query && !!query[alias]
+      customInclude['where'] =  { value: query[alias] }
     include.push(customInclude)
     excludeWithBlob.push(alias + '_id')
 
@@ -130,6 +136,33 @@ Crashreport.getAllReports = (limit, offset, callback) ->
     records = q.rows
     count = q.count
     callback(records, count)
+
+Crashreport.getAllQueryParameters = (callback) ->
+  allPromises = []
+  allPromises.push(Product.findAll())
+  allPromises.push(Version.findAll())
+  CustomFields.map((customField) ->
+    allPromises.push(customField.findAll())
+  )
+  queryParameters = {}
+  Sequelize.Promise.all(allPromises).then (results) ->
+    values = []
+    for product in results[0]
+      values.push(product.value)
+    queryParameters['product'] = values
+
+    values = []
+    for version in results[1]
+      values.push(version.value)
+    queryParameters['version'] = values
+
+    for i in [0...CustomFields.length]
+      values = []
+      for field in results[i+2]
+        values.push(field.value)
+      queryParameters[getAliasFromDbName(CustomFields[i].name)] = values
+
+    callback(queryParameters)
 
 Crashreport.createFromRequest = (req, res, callback) ->
   props = {}

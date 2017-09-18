@@ -1,0 +1,20 @@
+<div class="page-header">
+    <h1>Query Reports</h1>
+</div>
+<div class="container">
+    <form action="/crashreports">
+        <div class="form-group">
+            {{#each params}}
+            <label for="select{{titleCase @key}}">{{titleCase @key}}:</label>
+            <select name="{{@key}}" class="form-control" id="select{{titleCase @key}}">
+                <option></option>
+                {{#each this}}
+                    <option>{{this}}</option>
+                {{/each}}
+            </select>
+            {{/each}}
+            <br>
+            <input type="submit" class="btn btn-info" value="Query">
+        </div>
+    </form>
+</div>

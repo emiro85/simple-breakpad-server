@@ -233,7 +233,7 @@ run = ->
     offset = req.offset
     page = req.query.page
 
-    Crashreport.getAllReports limit, offset, (records, count) ->
+    Crashreport.getAllReports limit, offset, req.query, (records, count) ->
       pageCount = Math.ceil(count / limit)
       viewReports = records.map(crashreportToViewJson)
 
@@ -252,6 +252,13 @@ run = ->
           hide: pageCount <= 1
           page: page
           pageCount: pageCount
+
+  breakpad.get '/crashreports/query', isLoggedIn, (req, res, next) ->
+    Crashreport.getAllQueryParameters (params) ->
+      res.render 'crashreport-query', {
+        serverName: serverName
+        params: params
+      }
 
   breakpad.get '/symfiles', isLoggedIn, (req, res, next) ->
     limit = req.query.limit
