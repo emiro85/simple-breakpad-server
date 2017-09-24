@@ -173,9 +173,8 @@ Crashreport.createFromRequest = (req, res, callback) ->
 
   # Get originating request address, respecting reverse proxies (e.g.
   #   X-Forwarded-For header)
-  # Fixed list of just localhost as trusted reverse-proxy, we can add
-  #   a config option if needed
-  props.ip = addr(req, ['127.0.0.1', '::ffff:127.0.0.1'])
+  trustedProxies = config.get('trustedProxies') || []
+  props.ip = addr(req, trustedProxies)
 
   req.busboy.on 'file', (fieldname, file, filename, encoding, mimetype) ->
     streamOps.push streamToArray(file).then((parts) ->

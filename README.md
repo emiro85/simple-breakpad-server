@@ -114,6 +114,7 @@ customFields:
     - name: 'customfile2'
   params: ['customparam']
 dataDir: '/home/myuser/.simple-breakpad-server'
+trustedProxies: ['127.0.0.1', '::ffff:127.0.0.1']
 ```
 
 ### Database configuration
