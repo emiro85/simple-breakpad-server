@@ -40,6 +40,7 @@ crashreportToViewJson = (report) ->
     if value.type instanceof Sequelize.BLOB
       unorderedProps[name] = { path: "/crashreports/#{report.id}/files/#{name}" }
 
+  relativeTimeFormat = config.get('relativeTimeFormat') || false
   json = report.toJSON()
   for k,v of json
     if k in hidden
@@ -48,9 +49,15 @@ crashreportToViewJson = (report) ->
       # already handled
     else if k == 'created_at'
       # change the name of this key for display purposes
-      unorderedProps['created'] = moment(v).fromNow()
+      if relativeTimeFormat
+        unorderedProps['created'] = moment(v).fromNow()
+      else
+        unorderedProps['created'] = moment(v).format('DD.MM.YYYY, HH:mm:ss')
     else if v instanceof Date
-      unorderedProps[k] = moment(v).fromNow()
+      if relativeTimeFormat
+        unorderedProps[k] = moment(v).fromNow()
+      else
+        unorderedProps[k] = moment(v).format('DD.MM.YYYY, HH:mm:ss')
     else if v isnt null && typeof v == 'object'
       unorderedProps[k] = v.value
     else
@@ -80,14 +87,21 @@ symfileToViewJson = (symfile) ->
   unorderedProps = {}
   json = symfile.toJSON()
 
+  relativeTimeFormat = config.get('relativeTimeFormat') || false
   for k,v of json
     if k in hidden
       # pass
     else if k == 'created_at'
       # change the name of this key for display purposes
-      unorderedProps['created'] = moment(v).fromNow()
+      if relativeTimeFormat
+        unorderedProps['created'] = moment(v).fromNow()
+      else
+        unorderedProps['created'] = moment(v).format('DD.MM.YYYY, HH:mm:ss')
     else if v instanceof Date
-      unorderedProps[k] = moment(v).fromNow()
+      if relativeTimeFormat
+        unorderedProps[k] = moment(v).fromNow('DD.MM.YYYY, HH:mm:ss')
+      else
+        unorderedProps[k] = moment(v).format()
     else if v isnt null && typeof v == 'object'
       unorderedProps[k] = v.value
     else

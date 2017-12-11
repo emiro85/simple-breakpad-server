@@ -44,6 +44,7 @@ nconf.defaults
     customFields:
       params: []
   dataDir: SBS_HOME
+  relativeTimeFormat: true
   trustedProxies: ['127.0.0.1', '::ffff:127.0.0.1']
 
 # Post-process custom files and params
